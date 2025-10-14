@@ -1,4 +1,19 @@
 services:
+    traefik:
+        image: traefik:v3.3
+        command:
+            - "--api.insecure=true"
+            - "--providers.docker=true"
+            - "--providers.docker.exposedbydefault=false"
+            - "--entrypoints.web.address=:80"
+        ports:
+            - "80:80"
+            - "8090:8080"
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        networks:
+            - traefik-network
+    
     postgres-auth:
         image: postgres:18-alpine
         restart: always
@@ -15,6 +30,8 @@ services:
             interval: 1s
             timeout: 5s
             retries: 10
+        networks:
+            - traefik-network
 
     auth-svc:
         build: ./auth-svc
@@ -24,8 +41,26 @@ services:
         depends_on:
             postgres-auth:
                 condition: service_healthy
-        ports:
-            - "${AUTH_SVC_PORT}:8080"
+        labels:
+            - "traefik.enable=true"
+            
+            - "traefik.http.routers.auth-public.rule=PathPrefix(`/auth/register`) || PathPrefix(`/auth/login`) || PathPrefix(`/auth/health`) || PathPrefix(`/auth/test-device`)"
+            - "traefik.http.routers.auth-public.entrypoints=web"
+            - "traefik.http.routers.auth-public.middlewares=strip-auth-prefix"
+            - "traefik.http.routers.auth-public.service=auth"
+            
+            - "traefik.http.routers.auth-protected.rule=PathPrefix(`/auth`) && !PathPrefix(`/auth/register`) && !PathPrefix(`/auth/login`) && !PathPrefix(`/auth/health`) && !PathPrefix(`/auth/test-device`)"
+            - "traefik.http.routers.auth-protected.entrypoints=web"
+            - "traefik.http.routers.auth-protected.middlewares=jwt-auth@docker,strip-auth-prefix"  
+            - "traefik.http.routers.auth-protected.service=auth"
+            
+            - "traefik.http.services.auth.loadbalancer.server.port=8080"
+            
+            - "traefik.http.middlewares.jwt-auth.forwardauth.address=http://auth-svc:8080/verify-token"
+            - "traefik.http.middlewares.jwt-auth.forwardauth.authResponseHeaders=X-User-Id,X-User-Email"
+            - "traefik.http.middlewares.strip-auth-prefix.stripprefix.prefixes=/auth"
+        networks:
+            - traefik-network
 
     postgres-device:
         image: postgres:18-alpine
@@ -43,6 +78,8 @@ services:
             interval: 1s
             timeout: 5s
             retries: 10  
+        networks:
+            - traefik-network
 
     device-svc:
         build: ./device-svc
@@ -52,8 +89,18 @@ services:
         depends_on:
             postgres-device:
                 condition: service_healthy
-        ports:
-            - "${DEVICE_SVC_PORT}:8080"
+        labels:
+            - "traefik.enable=true"
+                        
+            - "traefik.http.routers.device-protected.rule=PathPrefix(`/device`)"
+            - "traefik.http.routers.device-protected.entrypoints=web"
+            - "traefik.http.routers.device-protected.middlewares=jwt-auth@docker,strip-device-prefix"
+            - "traefik.http.routers.device-protected.service=device"
+            
+            - "traefik.http.services.device.loadbalancer.server.port=8080"
+            - "traefik.http.middlewares.strip-device-prefix.stripprefix.prefixes=/device"
+        networks:
+            - traefik-network
 
     postgres-user:
         image: postgres:18-alpine
@@ -71,6 +118,8 @@ services:
             interval: 1s
             timeout: 5s
             retries: 10 
+        networks:
+            - traefik-network
 
     user-svc:
         build: ./user-svc
@@ -80,11 +129,26 @@ services:
         depends_on:
             postgres-user:
                 condition: service_healthy
-        ports:
-            - "${USER_SVC_PORT}:8080"
+        labels:
+            - "traefik.enable=true"
+                        
+            - "traefik.http.routers.user-protected.rule=PathPrefix(`/user`)"
+            - "traefik.http.routers.user-protected.entrypoints=web"
+            - "traefik.http.routers.user-protected.middlewares=jwt-auth@docker,strip-user-prefix"
+            - "traefik.http.routers.user-protected.service=user"
+            
+            - "traefik.http.services.user.loadbalancer.server.port=8080"
+            - "traefik.http.middlewares.strip-user-prefix.stripprefix.prefixes=/user"
+        networks:
+            - traefik-network
     
     
 volumes:
     pgdata_auth:
     pgdata_device:
     pgdata_user:
+
+
+networks:
+    traefik-network:
+        driver: bridge

@@ -1,4 +1,7 @@
-use axum::{http::StatusCode, response::IntoResponse};
+use axum::{
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+};
 use reqwest::Client;
 
 pub async fn health_check() -> impl IntoResponse {
@@ -17,5 +20,13 @@ pub async fn test_device_health() -> Result<String, StatusCode> {
             }
         }
         Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+    }
+}
+
+pub async fn verify_token(headers: HeaderMap) -> StatusCode {
+    if headers.contains_key("authorization") {
+        StatusCode::OK
+    } else {
+        StatusCode::UNAUTHORIZED
     }
 }
