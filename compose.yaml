@@ -38,6 +38,10 @@ services:
         environment:
             - DATABASE_URL=postgres://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres-auth:5432/${POSTGRES_AUTH_DB}
             - RUST_LOG=info
+            - JWT_SECRET= ${JWT_SECRET}
+            - JWT_ISSUER= ${JWT_ISSUER}
+            - JWT_AUDIENCE= ${JWT_AUDIENCE}
+            - ACCESS_TOKEN_TTL_SECONDS= ${ACCESS_TOKEN_TTL_SECONDS}
         depends_on:
             postgres-auth:
                 condition: service_healthy

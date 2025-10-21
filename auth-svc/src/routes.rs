@@ -1,10 +1,20 @@
-use axum::{Router, routing::get};
+use std::sync::Arc;
 
-use crate::handlers::{self, test_device_health, verify_token};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
-pub fn create_routes() -> Router<()> {
+use crate::{
+    AppState,
+    handlers::{self, login, me, register, test_device_health},
+};
+
+pub fn create_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(handlers::health_check))
         .route("/test-device", get(test_device_health))
-        .route("/verify-token", get(verify_token))
+        .route("/register", post(register))
+        .route("/login", post(login))
+        .route("/me", get(me))
 }
