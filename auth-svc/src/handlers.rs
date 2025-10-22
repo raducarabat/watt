@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::{
     AppState,
     config::JwtConfig,
-    jwt::{AuthUser, sign},
+    jwt::{AuthUser, sign, verify},
     user::{AuthResponse, LoginRequest, RegisterRequest, User, UserResponse},
 };
 
@@ -96,7 +96,7 @@ pub async fn login(
     }
 
     let cfg = JwtConfig::from_env();
-    let token = sign(user.id, &cfg).map_err(|e| {
+    let token = sign(user.id, user.role, &cfg).map_err(|e| {
         tracing::error!(?e, "jwt sign failed");
         ApiError::Internal
     })?;
@@ -117,6 +117,38 @@ pub async fn me(user: AuthUser) -> Result<Json<MeResponse>, ApiError> {
     Ok(Json(MeResponse {
         user_id: user.user_id,
     }))
+}
+
+pub async fn verify_token(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, StatusCode> {
+    let token = extract_bearer(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let cfg = JwtConfig::from_env();
+
+    let claims = verify(token, &cfg).map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let mut out = HeaderMap::new();
+
+    let user_id = Uuid::parse_str(&claims.sub).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    out.insert("X-User-Id", user_id.to_string().parse().unwrap());
+
+    out.insert("X-User-Role", claims.role.to_string().parse().unwrap());
+    Ok((StatusCode::OK, out))
+}
+
+fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
+    let auth = headers
+        .get(axum::http::header::AUTHORIZATION)?
+        .to_str()
+        .ok()?;
+    let (scheme, token) = auth.split_once(' ')?;
+    if scheme.eq_ignore_ascii_case("bearer") {
+        Some(token)
+    } else {
+        None
+    }
 }
 
 fn hash_password(pwd: &str) -> Result<String, argon2::password_hash::Error> {

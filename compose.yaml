@@ -60,8 +60,8 @@ services:
             
             - "traefik.http.services.auth.loadbalancer.server.port=8080"
             
-            - "traefik.http.middlewares.jwt-auth.forwardauth.address=http://auth-svc:8080/verify-token"
-            - "traefik.http.middlewares.jwt-auth.forwardauth.authResponseHeaders=X-User-Id,X-User-Email"
+            - "traefik.http.middlewares.jwt-auth.forwardauth.address=http://auth-svc:8080/verify"
+            - "traefik.http.middlewares.jwt-auth.forwardauth.authResponseHeaders=X-User-Id,X-User-Role"
             - "traefik.http.middlewares.strip-auth-prefix.stripprefix.prefixes=/auth"
         networks:
             - traefik-network

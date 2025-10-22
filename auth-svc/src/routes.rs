@@ -17,4 +17,5 @@ pub fn create_routes() -> Router<Arc<AppState>> {
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/me", get(me))
+        .route("/verify", get(handlers::verify_token))
 }

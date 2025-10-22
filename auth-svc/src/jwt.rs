@@ -6,7 +6,7 @@ use uuid::Uuid;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use time::{Duration, OffsetDateTime};
 
-use crate::{config::JwtConfig, handlers::ApiError};
+use crate::{config::JwtConfig, handlers::ApiError, user::UserRole};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -15,9 +15,10 @@ pub struct Claims {
     pub aud: String,
     pub exp: i64,
     pub iat: i64,
+    pub role: UserRole,
 }
 
-pub fn sign(user_id: Uuid, cfg: &JwtConfig) -> Result<String, ApiError> {
+pub fn sign(user_id: Uuid, role: UserRole, cfg: &JwtConfig) -> Result<String, ApiError> {
     let now = OffsetDateTime::now_utc();
     let exp = now + Duration::seconds(cfg.ttl_seconds as i64);
 
@@ -27,6 +28,7 @@ pub fn sign(user_id: Uuid, cfg: &JwtConfig) -> Result<String, ApiError> {
         aud: cfg.audience.clone(),
         exp: exp.unix_timestamp(),
         iat: now.unix_timestamp(),
+        role,
     };
 
     jsonwebtoken::encode(
