@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use argon2::{
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
@@ -11,7 +8,7 @@ use axum::{
     Json,
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::IntoResponse,
 };
 use reqwest::Client;
 use serde::Serialize;
@@ -20,33 +17,26 @@ use uuid::Uuid;
 use crate::{
     AppState,
     config::JwtConfig,
-    jwt::{AuthUser, sign, verify},
-    user::{AuthResponse, LoginRequest, RegisterRequest, User, UserResponse},
+    errors::ApiError,
+    jwt::{sign, verify},
+    user::{AuthResponse, LoginRequest, RegisterRequest, User},
 };
 
 pub async fn health_check() -> impl IntoResponse {
     StatusCode::OK
 }
 
-pub async fn test_device_health() -> Result<String, StatusCode> {
-    let client = Client::new();
-
-    match client.get("http://device-svc:8080/health").send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                Ok("Device service is healthy.".to_string())
-            } else {
-                Err(StatusCode::SERVICE_UNAVAILABLE)
-            }
-        }
-        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
-    }
+#[derive(Serialize)]
+struct CreateUserPayload {
+    unit_energy: String,
+    home_type: String,
+    goal_kwh_month: i64,
 }
 
 pub async fn register(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>,
-) -> Result<Json<User>, ApiError> {
+) -> Result<Json<AuthResponse>, ApiError> {
     let hash = hash_password(&payload.password).map_err(|_| ApiError::Internal)?;
 
     let user = sqlx::query_as::<_, User>(
@@ -69,7 +59,51 @@ pub async fn register(
         ApiError::Internal
     })?;
 
-    Ok(Json(user))
+    let cfg = JwtConfig::from_env();
+    let token = sign(user.id, user.role, &cfg).map_err(|e| {
+        tracing::error!(?e, "jwt sign failed");
+        ApiError::Internal
+    })?;
+
+    let create_body = CreateUserPayload {
+        unit_energy: "KWH".into(),
+        home_type: "HOUSE".into(),
+        goal_kwh_month: 300,
+    };
+
+    let traefik = std::env::var("TRAEFIK_URL").unwrap_or_else(|_| "http://traefik:80".into());
+    let host = std::env::var("TRAEFIK_HOST").unwrap_or_else(|_| "localhost".into());
+    let url = format!("{}/user/create", traefik);
+
+    let resp = Client::new()
+        .post(&url)
+        .header("Host", host)
+        .bearer_auth(&token)
+        .json(&create_body)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "user-svc call failed");
+            ApiError::Internal
+        })?;
+
+    if let Err(e) = resp.error_for_status_ref() {
+        tracing::error!(
+            ?e,
+            "user-svc /create returned error; rolling back auth user"
+        );
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user.id)
+            .execute(&state.db_pool)
+            .await;
+        return Err(ApiError::Internal);
+    }
+
+    Ok(Json(AuthResponse {
+        access_token: token,
+        token_type: "Bearer".into(),
+        expires_in: cfg.ttl_seconds,
+    }))
 }
 
 pub async fn login(
@@ -108,21 +142,7 @@ pub async fn login(
     }))
 }
 
-#[derive(Serialize)]
-pub struct MeResponse {
-    user_id: Uuid,
-}
-
-pub async fn me(user: AuthUser) -> Result<Json<MeResponse>, ApiError> {
-    Ok(Json(MeResponse {
-        user_id: user.user_id,
-    }))
-}
-
-pub async fn verify_token(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Result<impl IntoResponse, StatusCode> {
+pub async fn verify_token(headers: HeaderMap) -> Result<impl IntoResponse, StatusCode> {
     let token = extract_bearer(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
 
     let cfg = JwtConfig::from_env();
@@ -163,32 +183,4 @@ fn verify_password(password: &str, stored: &str) -> Result<bool, argon2::passwor
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok())
-}
-
-#[derive(Debug)]
-pub enum ApiError {
-    BadCredentials,
-    Conflict,
-    Internal,
-}
-
-impl Display for ApiError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApiError::BadCredentials => f.write_str("bad credentials"),
-            ApiError::Conflict => f.write_str("conflict"),
-            ApiError::Internal => f.write_str("internal server error"),
-        }
-    }
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let status = match self {
-            ApiError::BadCredentials => StatusCode::UNAUTHORIZED,
-            ApiError::Conflict => StatusCode::CONFLICT,
-            ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        (status, self.to_string()).into_response()
-    }
 }

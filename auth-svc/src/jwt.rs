@@ -6,7 +6,7 @@ use uuid::Uuid;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use time::{Duration, OffsetDateTime};
 
-use crate::{config::JwtConfig, handlers::ApiError, user::UserRole};
+use crate::{config::JwtConfig, errors::ApiError, user::UserRole};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
