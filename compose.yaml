@@ -48,12 +48,12 @@ services:
         labels:
             - "traefik.enable=true"
             
-            - "traefik.http.routers.auth-public.rule=PathPrefix(`/auth/register`) || PathPrefix(`/auth/login`) || PathPrefix(`/auth/health`) || PathPrefix(`/auth/test-device`)"
+            - "traefik.http.routers.auth-public.rule=PathPrefix(`/auth/register`) || PathPrefix(`/auth/login`) || PathPrefix(`/auth/health`)"
             - "traefik.http.routers.auth-public.entrypoints=web"
             - "traefik.http.routers.auth-public.middlewares=strip-auth-prefix"
             - "traefik.http.routers.auth-public.service=auth"
             
-            - "traefik.http.routers.auth-protected.rule=PathPrefix(`/auth`) && !PathPrefix(`/auth/register`) && !PathPrefix(`/auth/login`) && !PathPrefix(`/auth/health`) && !PathPrefix(`/auth/test-device`)"
+            - "traefik.http.routers.auth-protected.rule=PathPrefix(`/auth`) && !PathPrefix(`/auth/register`) && !PathPrefix(`/auth/login`) && !PathPrefix(`/auth/health`)"
             - "traefik.http.routers.auth-protected.entrypoints=web"
             - "traefik.http.routers.auth-protected.middlewares=jwt-auth@docker,strip-auth-prefix"  
             - "traefik.http.routers.auth-protected.service=auth"
@@ -95,8 +95,13 @@ services:
                 condition: service_healthy
         labels:
             - "traefik.enable=true"
+
+            - "traefik.http.routers.device-public.rule=PathPrefix(`/device/health`)"
+            - "traefik.http.routers.device-public.entrypoints=web"
+            - "traefik.http.routers.device-public.middlewares=strip-device-prefix"
+            - "traefik.http.routers.device-public.service=device"
                         
-            - "traefik.http.routers.device-protected.rule=PathPrefix(`/device`)"
+            - "traefik.http.routers.device-protected.rule=PathPrefix(`/device`) && !PathPrefix(`/device/health`)"
             - "traefik.http.routers.device-protected.entrypoints=web"
             - "traefik.http.routers.device-protected.middlewares=jwt-auth@docker,strip-device-prefix"
             - "traefik.http.routers.device-protected.service=device"
@@ -136,7 +141,12 @@ services:
         labels:
             - "traefik.enable=true"
                         
-            - "traefik.http.routers.user-protected.rule=PathPrefix(`/user`)"
+            - "traefik.http.routers.user-public.rule=PathPrefix(`/user/health`)"
+            - "traefik.http.routers.user-public.entrypoints=web"
+            - "traefik.http.routers.user-public.middlewares=strip-user-prefix"
+            - "traefik.http.routers.user-public.service=user"
+            
+            - "traefik.http.routers.user-protected.rule=PathPrefix(`/user`) && !PathPrefix(`/user/health`)"
             - "traefik.http.routers.user-protected.entrypoints=web"
             - "traefik.http.routers.user-protected.middlewares=jwt-auth@docker,strip-user-prefix"
             - "traefik.http.routers.user-protected.service=user"

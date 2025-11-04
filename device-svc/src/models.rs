@@ -13,11 +13,19 @@ pub struct Device {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateRequest {
+    pub user_id: Uuid,
     pub name: String,
     pub max_consumption: i32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Deserialize)]
+pub struct UpdateRequest {
+    pub id: Uuid,
+    pub name: Option<String>,
+    pub max_consumption: Option<f64>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum UserRole {
     CLIENT,
     ADMIN,

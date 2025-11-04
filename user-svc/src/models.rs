@@ -65,7 +65,7 @@ pub struct CreateRequest {
 #[derive(Deserialize, Debug)]
 pub struct UpdateRequest {
     pub user_id: Option<uuid::Uuid>,
-    pub unit_energy: Option<String>,
-    pub home_type: Option<String>,
+    pub unit_energy: Option<UnitEnergy>,
+    pub home_type: Option<HomeType>,
     pub goal_kwh_month: Option<i64>,
 }

@@ -12,6 +12,7 @@ pub enum ApiError {
     Unauthorized(String),
     Conflict,
     BadRequest(String),
+    NotFound(String),
     Internal,
 }
 
@@ -22,6 +23,7 @@ impl Display for ApiError {
             ApiError::Conflict => write!(f, "conflict"),
             ApiError::BadRequest(err) => write!(f, "bad request: {}", err),
             ApiError::Internal => write!(f, "internal server error"),
+            ApiError::NotFound(err) => write!(f, "not found: {}", err),
         }
     }
 }
@@ -46,6 +48,10 @@ impl IntoResponse for ApiError {
                 Json(json!({ "error": "internal server error" })),
             )
                 .into_response(),
+
+            ApiError::NotFound(msg) => {
+                (StatusCode::NOT_FOUND, Json(json!({"error": msg}))).into_response()
+            }
         }
     }
 }
