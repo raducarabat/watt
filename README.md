@@ -1,7 +1,7 @@
 # Watt – An Energy Management System
 
 ## What is Watt
-Still the same story: I wanted to understand how a “real” microservice setup feels, so I built one piece at a time. Watt is a small energy management platform with auth, users, devices, a Traefik gateway, and now a Next.js dashboard on top.
+I wanted to understand how a “real” microservice setup feels, so I built one piece at a time. Watt is a small energy management platform with auth, users, devices, a Traefik gateway, and a Next.js dashboard on top.
 
 ![Deployment Diagram](assets/deployment_diagram.png)
 
@@ -70,7 +70,7 @@ Each service exposes a friendly `/health` route. Everything else goes through Tr
 |-------------|---------------------------------|--------------------------------------------------|
 | auth-svc    | `GET /auth/health`<br>`POST /auth/login`<br>`POST /auth/register` | `POST /auth/verify` (forward-auth) |
 | user-svc    | `GET /user/health`              | `GET /user/me`<br>`PUT /user/update`<br>`POST /user/create`<br>`GET /user/get_all` |
-| device-svc  | `GET /device/health`            | `GET /device/read/all`<br>`PUT /device/update`<br>`POST /device/create` (admin)<br>`DELETE /device/delete/{id}` |
+| device-svc  | `GET /device/health`            | `GET /device/read/all`<br>`PUT /device/update`<br>`POST /device/create`<br>`DELETE /device/delete/{id}` |
 
 Frontend calls go through Traefik, so the server-side base URL is `http://traefik`. Browsers still hit `http://localhost`.
 
