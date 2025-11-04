@@ -13,6 +13,14 @@ services:
             - /var/run/docker.sock:/var/run/docker.sock:ro
         networks:
             - traefik-network
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=http://localhost:3000"
+          - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,POST,PUT,PATCH,DELETE,OPTIONS"
+          - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=Authorization,Content-Type"
+          - "traefik.http.middlewares.cors.headers.accesscontrolmaxage=86400"
+          - "traefik.http.middlewares.cors.headers.addvaryheader=true"
+          - "traefik.http.middlewares.cors.headers.accesscontrolallowcredentials=true"
     
     postgres-auth:
         image: postgres:18-alpine
@@ -50,12 +58,12 @@ services:
             
             - "traefik.http.routers.auth-public.rule=PathPrefix(`/auth/register`) || PathPrefix(`/auth/login`) || PathPrefix(`/auth/health`)"
             - "traefik.http.routers.auth-public.entrypoints=web"
-            - "traefik.http.routers.auth-public.middlewares=strip-auth-prefix"
+            - "traefik.http.routers.auth-public.middlewares=strip-auth-prefix,cors@docker"
             - "traefik.http.routers.auth-public.service=auth"
             
             - "traefik.http.routers.auth-protected.rule=PathPrefix(`/auth`) && !PathPrefix(`/auth/register`) && !PathPrefix(`/auth/login`) && !PathPrefix(`/auth/health`)"
             - "traefik.http.routers.auth-protected.entrypoints=web"
-            - "traefik.http.routers.auth-protected.middlewares=jwt-auth@docker,strip-auth-prefix"  
+            - "traefik.http.routers.auth-protected.middlewares=jwt-auth@docker,strip-auth-prefix,cors@docker"  
             - "traefik.http.routers.auth-protected.service=auth"
             
             - "traefik.http.services.auth.loadbalancer.server.port=8080"
@@ -98,12 +106,12 @@ services:
 
             - "traefik.http.routers.device-public.rule=PathPrefix(`/device/health`)"
             - "traefik.http.routers.device-public.entrypoints=web"
-            - "traefik.http.routers.device-public.middlewares=strip-device-prefix"
+            - "traefik.http.routers.device-public.middlewares=strip-device-prefix,cors@docker"
             - "traefik.http.routers.device-public.service=device"
                         
             - "traefik.http.routers.device-protected.rule=PathPrefix(`/device`) && !PathPrefix(`/device/health`)"
             - "traefik.http.routers.device-protected.entrypoints=web"
-            - "traefik.http.routers.device-protected.middlewares=jwt-auth@docker,strip-device-prefix"
+            - "traefik.http.routers.device-protected.middlewares=jwt-auth@docker,strip-device-prefix,cors@docker"
             - "traefik.http.routers.device-protected.service=device"
             
             - "traefik.http.services.device.loadbalancer.server.port=8080"
@@ -143,12 +151,12 @@ services:
                         
             - "traefik.http.routers.user-public.rule=PathPrefix(`/user/health`)"
             - "traefik.http.routers.user-public.entrypoints=web"
-            - "traefik.http.routers.user-public.middlewares=strip-user-prefix"
+            - "traefik.http.routers.user-public.middlewares=strip-user-prefix,cors@docker"
             - "traefik.http.routers.user-public.service=user"
             
             - "traefik.http.routers.user-protected.rule=PathPrefix(`/user`) && !PathPrefix(`/user/health`)"
             - "traefik.http.routers.user-protected.entrypoints=web"
-            - "traefik.http.routers.user-protected.middlewares=jwt-auth@docker,strip-user-prefix"
+            - "traefik.http.routers.user-protected.middlewares=jwt-auth@docker,strip-user-prefix,cors@docker"
             - "traefik.http.routers.user-protected.service=user"
             
             - "traefik.http.services.user.loadbalancer.server.port=8080"
@@ -156,6 +164,22 @@ services:
         networks:
             - traefik-network
     
+    web:
+        build:
+            context: ./web 
+            args:
+                NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost/}
+        ports:
+            - "3000:3000"
+        depends_on:
+            auth-svc:
+                condition: service_started
+            device-svc:
+                condition: service_started
+            user-svc:
+                condition: service_started
+        networks:
+            - traefik-network            
     
 volumes:
     pgdata_auth:

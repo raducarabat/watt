@@ -1,0 +1,11 @@
+node_modules
+.next/cache
+.next/static/cache
+npm-debug.log
+yarn.lock
+pnpm-lock.yaml
+.git
+.gitignore
+Dockerfile*
+docker-compose*.yml
+.env.local
