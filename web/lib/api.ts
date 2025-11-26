@@ -1,10 +1,12 @@
 import { AUTH_COOKIE_NAME } from "@/lib/constants";
 import type {
   AuthResponse,
+  ConsumptionResponse,
   Device,
   DeviceCreateRequest,
   DeviceUpdateRequest,
   LoginRequest,
+  UUID,
   RegisterRequest,
   User,
   UserCreateRequest,
@@ -151,6 +153,14 @@ export const deviceApi = {
       method: "DELETE",
       token,
     }),
+};
+
+export const monitorApi = {
+  getConsumption: (token: string, params: { deviceId: UUID; day: string }) =>
+    fetchJSON<ConsumptionResponse>(
+      `/monitor/consumption?device_id=${params.deviceId}&day=${params.day}`,
+      { token },
+    ),
 };
 
 export function buildAuthHeaderFromCookie(cookieHeader?: string) {

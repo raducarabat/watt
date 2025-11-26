@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{
@@ -44,6 +45,14 @@ pub async fn create(
         }
         ApiError::Internal
     })?;
+
+    if let Err(err) = state
+        .publisher
+        .publish_user_event("USER_CREATED", &user_data)
+        .await
+    {
+        error!(?err, "failed to publish USER_CREATED event");
+    }
 
     Ok(Json(user_data))
 }
@@ -93,6 +102,14 @@ pub async fn update(
         }
         _ => ApiError::Internal,
     })?;
+
+    if let Err(err) = state
+        .publisher
+        .publish_user_event("USER_UPDATED", &updated_user)
+        .await
+    {
+        error!(?err, "failed to publish USER_UPDATED event");
+    }
 
     Ok(Json(updated_user))
 }

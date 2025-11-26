@@ -7,12 +7,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod errors;
 mod handlers;
+mod messaging;
 mod middleware;
 mod models;
 mod routes;
 
+use messaging::EventPublisher;
+
 struct AppState {
     db_pool: PgPool,
+    publisher: EventPublisher,
 }
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -27,6 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
+    let broker_url =
+        std::env::var("SYNC_BROKER_URL").expect("SYNC_BROKER_URL must be set for user-svc.");
+    let sync_queue = std::env::var("SYNC_QUEUE").unwrap_or_else(|_| "sync.events".into());
 
     let pool = PgPoolOptions::new()
         .max_connections(20)
@@ -35,7 +42,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     MIGRATOR.run(&pool).await?;
 
-    let shared_state = Arc::new(AppState { db_pool: pool });
+    let publisher = EventPublisher::new(broker_url, sync_queue).await?;
+
+    let shared_state = Arc::new(AppState {
+        db_pool: pool,
+        publisher,
+    });
 
     let app = Router::new()
         .merge(create_route())

@@ -1,0 +1,17 @@
+{
+  "broker_url": "amqp://data_user:data_pass@rabbitmq-data:5672/%2f",
+  "queue": "device.measurements",
+  "interval_seconds": 60,
+  "devices": [
+    {
+      "device_id": "327500a7-2f05-44d3-9080-839f7d5067e0",
+      "night_load": 0.12,
+      "peak_load": 0.9
+    },
+    {
+      "device_id": "3cbd61bb-2b30-465a-94e5-1bee26b74326",
+      "night_load": 0.2,
+      "peak_load": 1.3
+    }
+  ]
+}

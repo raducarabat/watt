@@ -51,10 +51,9 @@ pub fn verify(token: &str, cfg: &JwtConfig) -> Result<Claims, ApiError> {
         &validation,
     )
     .map(|data| data.claims)
-    .map_err(|_| ApiError::BadCredentials) // treat any verify error as 401
+    .map_err(|_| ApiError::BadCredentials)
 }
 
-/// Extractor that enforces a valid Bearer token and exposes the subject as a UUID
 pub struct AuthUser {
     pub user_id: Uuid,
 }
@@ -69,7 +68,6 @@ where
         parts: &mut Parts,
         _state: &S,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
-        // Clone whatever you need to move into the async block
         let header_opt = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)

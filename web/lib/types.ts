@@ -21,6 +21,17 @@ export interface Device {
   created_at: string;
 }
 
+export interface HourlyPoint {
+  hour: number;
+  value: number;
+}
+
+export interface ConsumptionResponse {
+  device_id: UUID;
+  day: string;
+  points: HourlyPoint[];
+}
+
 export interface LoginRequest {
   username: string;
   password: string;

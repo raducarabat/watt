@@ -12,6 +12,7 @@ use axum::{
 };
 use reqwest::Client;
 use serde::Serialize;
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
     config::JwtConfig,
     errors::ApiError,
     jwt::{sign, verify},
+    messaging::{UserCreatedEvent, UserPayload},
     user::{AuthResponse, LoginRequest, RegisterRequest, User},
 };
 
@@ -97,6 +99,24 @@ pub async fn register(
             .execute(&state.db_pool)
             .await;
         return Err(ApiError::Internal);
+    }
+
+    if let Err(err) = state
+        .publisher
+        .publish_user_created(&UserCreatedEvent {
+            event_type: "USER_CREATED",
+            user_id: user.id,
+            payload: UserPayload {
+                id: user.id,
+                username: user.username.clone(),
+                default_unit: create_body.unit_energy.clone(),
+                default_home_type: create_body.home_type.clone(),
+                default_goal: create_body.goal_kwh_month,
+            },
+        })
+        .await
+    {
+        error!(?err, "failed to publish USER_CREATED event");
     }
 
     Ok(Json(AuthResponse {

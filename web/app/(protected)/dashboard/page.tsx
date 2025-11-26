@@ -1,8 +1,9 @@
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/Badge";
+import { ConsumptionChart } from "@/components/dashboard/ConsumptionChart";
 import { DevicesTable } from "@/components/dashboard/DevicesTable";
 import { ProfileCard } from "@/components/dashboard/ProfileCard";
-import { deviceApi, userApi } from "@/lib/api";
+import { deviceApi, monitorApi, userApi } from "@/lib/api";
 import { decodeAuthToken, hasAdminClaim } from "@/lib/auth";
 import { formatEnumLabel } from "@/lib/utils";
 import { logoutAction } from "../actions";
@@ -17,6 +18,7 @@ export default async function DashboardPage() {
   const token = await requireAuthToken();
   const claims = decodeAuthToken(token);
   const isAdmin = hasAdminClaim(claims);
+  const today = new Date().toISOString().split("T")[0];
 
   const [user, devices] = await withAuthHandling(() =>
     Promise.all([userApi.me(token), deviceApi.readAll(token)]),
@@ -26,6 +28,21 @@ export default async function DashboardPage() {
   const visibleDevices = isAdmin
     ? devices.filter((device) => device.user_id === user.id)
     : devices;
+
+  const initialDeviceId = visibleDevices[0]?.id ?? null;
+  let initialConsumption = null;
+  if (initialDeviceId) {
+    try {
+      initialConsumption = await withAuthHandling(() =>
+        monitorApi.getConsumption(token, {
+          deviceId: initialDeviceId,
+          day: today,
+        }),
+      );
+    } catch {
+      initialConsumption = null;
+    }
+  }
 
   return (
     <AppShell userName={userLabel} isAdmin={isAdmin} onLogout={logoutAction}>
@@ -51,6 +68,14 @@ export default async function DashboardPage() {
           />
         </section>
       </div>
+
+      <ConsumptionChart
+        devices={visibleDevices}
+        initialDeviceId={initialDeviceId}
+        initialDay={today}
+        initialData={initialConsumption}
+        unitLabel={formatEnumLabel(user.unit_energy)}
+      />
 
       <section className="mt-8 grid gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-card">
         <h2 className="text-lg font-semibold text-white">Account details</h2>

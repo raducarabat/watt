@@ -43,6 +43,7 @@ services:
 
     auth-svc:
         build: ./auth-svc
+        restart: unless-stopped
         environment:
             - DATABASE_URL=postgres://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres-auth:5432/${POSTGRES_AUTH_DB}
             - RUST_LOG=info
@@ -50,8 +51,12 @@ services:
             - JWT_ISSUER= ${JWT_ISSUER}
             - JWT_AUDIENCE= ${JWT_AUDIENCE}
             - ACCESS_TOKEN_TTL_SECONDS= ${ACCESS_TOKEN_TTL_SECONDS}
+            - SYNC_BROKER_URL=amqp://${RABBITMQ_SYNC_USER}:${RABBITMQ_SYNC_PASSWORD}@rabbitmq-sync:5672/${RABBITMQ_VHOST_ENCODED}
+            - SYNC_QUEUE=${SYNC_QUEUE:-sync.events}
         depends_on:
             postgres-auth:
+                condition: service_healthy
+            rabbitmq-sync:
                 condition: service_healthy
         labels:
             - "traefik.enable=true"
@@ -95,11 +100,16 @@ services:
 
     device-svc:
         build: ./device-svc
+        restart: unless-stopped
         environment:
             - DATABASE_URL=postgres://${POSTGRES_DEVICE_USER}:${POSTGRES_DEVICE_PASSWORD}@postgres-device:5432/${POSTGRES_DEVICE_DB}
             - RUST_LOG=info
+            - SYNC_BROKER_URL=amqp://${RABBITMQ_SYNC_USER}:${RABBITMQ_SYNC_PASSWORD}@rabbitmq-sync:5672/${RABBITMQ_VHOST_ENCODED}
+            - SYNC_QUEUE=${SYNC_QUEUE:-sync.events}
         depends_on:
             postgres-device:
+                condition: service_healthy
+            rabbitmq-sync:
                 condition: service_healthy
         labels:
             - "traefik.enable=true"
@@ -140,11 +150,16 @@ services:
 
     user-svc:
         build: ./user-svc
+        restart: unless-stopped
         environment:
             - DATABASE_URL=postgres://${POSTGRES_USER_USER}:${POSTGRES_USER_PASSWORD}@postgres-user:5432/${POSTGRES_USER_DB}
             - RUST_LOG=info
+            - SYNC_BROKER_URL=amqp://${RABBITMQ_SYNC_USER}:${RABBITMQ_SYNC_PASSWORD}@rabbitmq-sync:5672/${RABBITMQ_VHOST_ENCODED}
+            - SYNC_QUEUE=${SYNC_QUEUE:-sync.events}
         depends_on:
             postgres-user:
+                condition: service_healthy
+            rabbitmq-sync:
                 condition: service_healthy
         labels:
             - "traefik.enable=true"
@@ -161,6 +176,113 @@ services:
             
             - "traefik.http.services.user.loadbalancer.server.port=8080"
             - "traefik.http.middlewares.strip-user-prefix.stripprefix.prefixes=/user"
+        networks:
+            - traefik-network
+
+    postgres-monitoring:
+        image: postgres:18-alpine
+        restart: always
+        environment:
+            POSTGRES_DB: ${POSTGRES_MONITOR_DB}
+            POSTGRES_USER: ${POSTGRES_MONITOR_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_MONITOR_PASSWORD}
+        volumes:
+            - pgdata_monitor:/var/lib/postgresql/data
+        ports:
+            - "${POSTGRES_MONITOR_PORT}:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_MONITOR_USER} -d ${POSTGRES_MONITOR_DB}"]
+            interval: 1s
+            timeout: 5s
+            retries: 10
+        networks:
+            - traefik-network
+
+    rabbitmq-sync:
+        image: rabbitmq:3.13-management
+        restart: always
+        environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_SYNC_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_SYNC_PASSWORD}
+            RABBITMQ_DEFAULT_VHOST: /
+        healthcheck:
+            test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        ports:
+            - "${RABBITMQ_SYNC_PORT}:5672"
+            - "${RABBITMQ_SYNC_MANAGEMENT_PORT}:15672"
+        volumes:
+            - rabbitmq_sync_data:/var/lib/rabbitmq
+        networks:
+            - traefik-network
+
+    rabbitmq-data:
+        image: rabbitmq:3.13-management
+        restart: always
+        environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_DATA_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DATA_PASSWORD}
+            RABBITMQ_DEFAULT_VHOST: /
+        healthcheck:
+            test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        ports:
+            - "${RABBITMQ_DATA_PORT}:5672"
+            - "${RABBITMQ_DATA_MANAGEMENT_PORT}:15672"
+        volumes:
+            - rabbitmq_data_data:/var/lib/rabbitmq
+        networks:
+            - traefik-network
+
+    monitor-svc:
+        build: ./monitor-svc
+        restart: unless-stopped
+        environment:
+            - DATABASE_URL=postgres://${POSTGRES_MONITOR_USER}:${POSTGRES_MONITOR_PASSWORD}@postgres-monitoring:5432/${POSTGRES_MONITOR_DB}
+            - SYNC_BROKER_URL=amqp://${RABBITMQ_SYNC_USER}:${RABBITMQ_SYNC_PASSWORD}@rabbitmq-sync:5672/${RABBITMQ_VHOST_ENCODED}
+            - DATA_BROKER_URL=amqp://${RABBITMQ_DATA_USER}:${RABBITMQ_DATA_PASSWORD}@rabbitmq-data:5672/${RABBITMQ_VHOST_ENCODED}
+            - SYNC_QUEUE=${SYNC_QUEUE:-sync.events}
+            - MEASUREMENT_QUEUE=${MEASUREMENT_QUEUE:-device.measurements}
+            - RUST_LOG=info
+        depends_on:
+            postgres-monitoring:
+                condition: service_healthy
+            rabbitmq-sync:
+                condition: service_healthy
+            rabbitmq-data:
+                condition: service_healthy
+        labels:
+            - "traefik.enable=true"
+
+            - "traefik.http.routers.monitor-public.rule=PathPrefix(`/monitor/health`)"
+            - "traefik.http.routers.monitor-public.entrypoints=web"
+            - "traefik.http.routers.monitor-public.middlewares=strip-monitor-prefix,cors@docker"
+            - "traefik.http.routers.monitor-public.service=monitor"
+
+            - "traefik.http.routers.monitor-protected.rule=PathPrefix(`/monitor`) && !PathPrefix(`/monitor/health`)"
+            - "traefik.http.routers.monitor-protected.entrypoints=web"
+            - "traefik.http.routers.monitor-protected.middlewares=jwt-auth@docker,strip-monitor-prefix,cors@docker"
+            - "traefik.http.routers.monitor-protected.service=monitor"
+
+            - "traefik.http.services.monitor.loadbalancer.server.port=8080"
+            - "traefik.http.middlewares.strip-monitor-prefix.stripprefix.prefixes=/monitor"
+        networks:
+            - traefik-network
+
+    device-simulator:
+        build: ./device-simulator
+        restart: unless-stopped
+        environment:
+            - SIMULATOR_CONFIG=/app/config.json
+        volumes:
+            - ./device-simulator/config.json:/app/config.json:ro
+        depends_on:
+            rabbitmq-data:
+                condition: service_healthy
         networks:
             - traefik-network
     
@@ -185,6 +307,9 @@ volumes:
     pgdata_auth:
     pgdata_device:
     pgdata_user:
+    pgdata_monitor:
+    rabbitmq_sync_data:
+    rabbitmq_data_data:
 
 
 networks:

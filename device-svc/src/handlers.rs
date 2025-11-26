@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{
@@ -54,6 +55,14 @@ pub async fn create(
         ApiError::Internal
     })?;
 
+    if let Err(err) = state
+        .publisher
+        .publish_device_event("DEVICE_CREATED", &device)
+        .await
+    {
+        error!(?err, "failed to publish DEVICE_CREATED event");
+    }
+
     Ok(Json(device))
 }
 
@@ -91,6 +100,14 @@ pub async fn get_device(
     }
     .map_err(|_| ApiError::Internal)?
     .ok_or(ApiError::NotFound("device id not found".to_string()))?;
+
+    if let Err(err) = state
+        .publisher
+        .publish_device_event("DEVICE_UPDATED", &device)
+        .await
+    {
+        error!(?err, "failed to publish DEVICE_UPDATED event");
+    }
 
     Ok(Json(device))
 }
@@ -195,7 +212,12 @@ pub async fn delete_device(
     .await;
 
     match result {
-        Ok(r) if r.rows_affected() > 0 => Ok(StatusCode::NO_CONTENT),
+        Ok(r) if r.rows_affected() > 0 => {
+            if let Err(err) = state.publisher.publish_device_deleted(id).await {
+                error!(?err, "failed to publish DEVICE_DELETED event");
+            }
+            Ok(StatusCode::NO_CONTENT)
+        }
         Ok(_) => Err(ApiError::NotFound("device id not found".to_string())),
         Err(e) => {
             if let sqlx::Error::Database(db) = &e {
@@ -213,9 +235,14 @@ pub async fn delete_all_devices(
     State(state): State<Arc<AppState>>,
     user: AuthenticatedUser,
 ) -> Result<StatusCode, ApiError> {
-    if user.role == UserRole::ADMIN {
+    if user.role != UserRole::ADMIN {
         return Err(ApiError::Unauthorized("Not an admin".to_string()));
     }
+
+    let device_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM devices")
+        .fetch_all(&state.db_pool)
+        .await
+        .map_err(|_| ApiError::Internal)?;
 
     let result = sqlx::query(
         r#"
@@ -226,7 +253,14 @@ pub async fn delete_all_devices(
     .await;
 
     match result {
-        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Ok(_) => {
+            for id in device_ids {
+                if let Err(err) = state.publisher.publish_device_deleted(id).await {
+                    error!(?err, "failed to publish DEVICE_DELETED event");
+                }
+            }
+            Ok(StatusCode::NO_CONTENT)
+        }
         Err(e) => {
             if let sqlx::Error::Database(db) = &e {
                 if db.code().as_deref() == Some("23503") {

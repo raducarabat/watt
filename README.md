@@ -3,7 +3,7 @@
 ## What is Watt
 I wanted to understand how a “real” microservice setup feels, so I built one piece at a time. Watt is a small energy management platform with auth, users, devices, a Traefik gateway, and a Next.js dashboard on top.
 
-![Deployment Diagram](assets/deployment_diagram.png)
+![Deployment Diagram](assets/diagram_v2.png)
 
 ## Structure
 Everything lives in Docker Compose. Right now we have:
