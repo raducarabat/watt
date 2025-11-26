@@ -11,6 +11,8 @@ Everything lives in Docker Compose. Right now we have:
 - `auth-svc` (Rust + Axum) with its own Postgres database
 - `user-svc` (Rust + Axum) with its own Postgres database
 - `device-svc` (Rust + Axum) with its own Postgres database
+- `monitor-svc` (Rust + Axum) with its own Postgres database for hourly consumption aggregates
+- `device-simulator` (Rust worker) that publishes synthetic telemetry to RabbitMQ
 - Traefik acting as reverse proxy + API gateway + JWT forward auth
 - `web` (Next.js 16) for the dashboard/admin UI
 
@@ -71,16 +73,17 @@ Each service exposes a friendly `/health` route. Everything else goes through Tr
 | auth-svc    | `GET /auth/health`<br>`POST /auth/login`<br>`POST /auth/register` | `POST /auth/verify` (forward-auth) |
 | user-svc    | `GET /user/health`              | `GET /user/me`<br>`PUT /user/update`<br>`POST /user/create`<br>`GET /user/get_all` |
 | device-svc  | `GET /device/health`            | `GET /device/read/all`<br>`PUT /device/update`<br>`POST /device/create`<br>`DELETE /device/delete/{id}` |
+| monitor-svc | `GET /monitor/health`           | `GET /monitor/consumption?device_id=ID&day=YYYY-MM-DD` |
 
 Frontend calls go through Traefik, so the server-side base URL is `http://traefik`. Browsers still hit `http://localhost`.
 
 ## Frontend
 - Next.js App Router, Tailwind, React Hook Form + Zod
 - Dashboard shows personal profile + devices (even for admins)
-- Admin console has two tabs (Users, Devices) with CRUD 
+- Admin console has two tabs (Users, Devices) with CRUD
+- Daily energy trend chart pulls hourly aggregates from `monitor-svc`
 
 ## Roadmap / Notes
-- RabbitMQ 
 - Metrics/observability stack would be a nice next step
 - CI pipeline is also on the TODO list
 
